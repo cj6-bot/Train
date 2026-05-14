@@ -415,3 +415,50 @@ if 'bot' in st.session_state:
             st.table(positions)
         else:
             st.info("لا توجد صفقات مفتوحة حالياً")
+import streamlit as st
+
+# --- واجهة المستخدم (توضع في نهاية الملف) ---
+st.set_page_config(page_title="Gate.io Trading Bot", layout="wide")
+
+st.title("🤖 واجهة تحكم بوت Gate.io")
+
+# 1. إعدادات المفاتيح في القائمة الجانبية
+with st.sidebar:
+    st.header("🔑 إعدادات الـ API")
+    key_input = st.text_input("ادخل الـ API KEY الجديد هنا", type="password")
+    secret_input = st.text_input("ادخل الـ SECRET الجديد هنا", type="password")
+    use_testnet = st.checkbox("أنا أستخدم حساب تجريبي (Testnet)", value=True)
+    
+    conn_button = st.button("تحديث والاتصال")
+
+# 2. تشغيل المحرك
+if conn_button:
+    if key_input and secret_input:
+        # إنشاء نسخة من المحرك بالمفاتيح الجديدة
+        bot = BotEngine(api_key=key_input, api_secret=secret_input, testnet=use_testnet)
+        status = bot.connect()
+        
+        if status["ok"]:
+            st.success("✅ تم الاتصال بنجاح!")
+            st.session_state['active_bot'] = bot
+            st.metric("الرصيد المتاح", f"${status['balance']['available']}")
+        else:
+            st.error(f"❌ خطأ في المفاتيح: {status['error']}")
+            st.info("تأكد أنك لا تستخدم مفاتيح الحقيقي في Testnet أو العكس.")
+
+# 3. عرض الصفقات والتحليل إذا نجح الاتصال
+if 'active_bot' in st.session_state:
+    bot = st.session_state['active_bot']
+    st.divider()
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        symbol = st.text_input("رمز العملة", "BTC_USDT")
+        if st.button("تحليل الصفقة"):
+            res = bot.analyse(symbol)
+            st.write(res)
+            
+    with col2:
+        st.subheader("المراكز المفتوحة")
+        pos = bot.get_open_positions()
+        st.write(pos if pos else "لا توجد صفقات حالياً")
