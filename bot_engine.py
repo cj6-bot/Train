@@ -372,3 +372,46 @@ class BotEngine:
         contracts = list_futures_contracts()
         return [c["name"] for c in contracts
                 if not c.get("in_delisting") and float(c.get("order_size_min", 1)) >= 0]
+import streamlit as st
+
+# --- واجهة المستخدم (Streamlit Interface) ---
+st.set_page_config(page_title="Gate.io Bot", layout="wide")
+st.title("🤖 محرك التداول الآلي - Gate.io")
+
+# مدخلات الـ API في القائمة الجانبية
+with st.sidebar:
+    st.header("إعدادات الاتصال")
+    api_key = st.text_input("API Key", type="password")
+    api_secret = st.text_input("API Secret", type="password")
+    is_testnet = st.checkbox("استخدام حساب التجربة (Testnet)", value=True)
+    
+    if st.button("اتصال بالمنصة"):
+        bot = BotEngine(api_key, api_secret, testnet=is_testnet)
+        res = bot.connect()
+        if res["ok"]:
+            st.success(f"تم الاتصال! الرصيد المتاح: {res['balance']['available']}$")
+            st.session_state['bot'] = bot
+        else:
+            st.error(f"فشل الاتصال: {res['error']}")
+
+# عرض البيانات إذا تم الاتصال
+if 'bot' in st.session_state:
+    bot = st.session_state['bot']
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("تحليل العملات")
+        symbol = st.text_input("أدخل رمز العملة (مثلاً BTC_USDT)", "BTC_USDT")
+        if st.button("تحليل الآن"):
+            result = bot.analyse(symbol)
+            if result:
+                st.write(f"النتيجة: {result['votes']} / 10")
+                st.json(result)
+
+    with col2:
+        st.subheader("المراكز المفتوحة")
+        positions = bot.get_open_positions()
+        if positions:
+            st.table(positions)
+        else:
+            st.info("لا توجد صفقات مفتوحة حالياً")
