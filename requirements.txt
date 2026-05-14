@@ -1,6 +1,6 @@
 streamlit
-ccxt
 pandas
 pandas-ta
-numpy
+ccxt
 requests
+numpy
