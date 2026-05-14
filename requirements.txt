@@ -1,5 +1,6 @@
 streamlit==1.31.0
 pandas==2.1.4
+pandas-ta
 ccxt==4.2.19
 requests==2.31.0
 numpy==1.26.2
