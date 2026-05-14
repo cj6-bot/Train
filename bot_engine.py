@@ -3,12 +3,15 @@
 مارجن ثابت: $100 | رافعة: 100x | Trailing Stop | فلتر الجلسة
 """
 
+
 import logging, time, hmac, hashlib, requests
 from datetime import datetime
 import pandas as pd
 from indicators import compute_all, vote
 
+
 logger = logging.getLogger(__name__)
+
 
 FIXED_MARGIN   = 100
 FIXED_LEVERAGE = 100
@@ -20,12 +23,15 @@ PUBLIC_REST    = "https://api.gateio.ws/api/v4"
 KLINES_LIMIT   = 200
 
 
+
+
 class GateClient:
     def __init__(self, api_key, api_secret, testnet=True):
         self.api_key    = api_key
         self.api_secret = api_secret
         self.base       = TESTNET_REST if testnet else LIVE_REST
         self.session    = requests.Session()
+
 
     def _headers(self, method, path, query="", body=""):
         ts        = str(int(time.time()))
@@ -35,11 +41,13 @@ class GateClient:
         return {"KEY": self.api_key, "Timestamp": ts, "SIGN": sig,
                 "Content-Type": "application/json", "Accept": "application/json"}
 
+
     def get(self, path, params=None):
         query = "&".join(f"{k}={v}" for k, v in (params or {}).items())
         url   = self.base + path + ("?" + query if query else "")
         r     = self.session.get(url, headers=self._headers("GET", path, query), timeout=10)
         r.raise_for_status(); return r.json()
+
 
     def post(self, path, body):
         import json as _j
@@ -48,11 +56,14 @@ class GateClient:
         r   = self.session.post(url, headers=self._headers("POST", path, "", b), data=b, timeout=10)
         r.raise_for_status(); return r.json()
 
+
     def delete(self, path, params=None):
         query = "&".join(f"{k}={v}" for k, v in (params or {}).items())
         url   = self.base + path + ("?" + query if query else "")
         r     = self.session.delete(url, headers=self._headers("DELETE", path, query), timeout=10)
         r.raise_for_status(); return r.json()
+
+
 
 
 def fetch_public_klines(symbol, interval="5m", limit=200):
@@ -72,6 +83,8 @@ def fetch_public_klines(symbol, interval="5m", limit=200):
         logger.warning(f"fetch_public_klines({symbol}): {e}"); return None
 
 
+
+
 def list_futures_contracts():
     try:
         r = requests.get(f"{PUBLIC_REST}/futures/{SETTLE}/contracts", timeout=10)
@@ -80,11 +93,15 @@ def list_futures_contracts():
         logger.warning(f"list_contracts: {e}"); return []
 
 
+
+
 def to_gate_symbol(symbol):
     s = symbol.upper().strip()
     if "_" in s: return s
     if s.endswith("USDT"): return s[:-4] + "_USDT"
     return s
+
+
 
 
 class BotEngine:
@@ -100,6 +117,7 @@ class BotEngine:
         self.last_vote   = {}
         # Trailing Stop tracking
         self.trail_prices = {}   # symbol → highest price since entry
+
 
     def connect(self):
         try:
@@ -117,6 +135,7 @@ class BotEngine:
             self.connected = False
             return {"ok": False, "error": str(e)}
 
+
     def get_balance(self):
         if not self.client: return {}
         try:
@@ -130,8 +149,10 @@ class BotEngine:
         except Exception as e:
             logger.warning(f"get_balance: {e}"); return {}
 
+
     def fetch_klines(self, symbol, interval="5m", limit=KLINES_LIMIT):
         return fetch_public_klines(to_gate_symbol(symbol), interval, limit)
+
 
     def get_current_price(self, symbol):
         sym = to_gate_symbol(symbol)
@@ -143,6 +164,7 @@ class BotEngine:
         except Exception as e:
             logger.warning(f"get_price({sym}): {e}"); return None
 
+
     def get_quanto_multiplier(self, symbol):
         sym = to_gate_symbol(symbol)
         try:
@@ -151,6 +173,7 @@ class BotEngine:
             return float(r.json().get("quanto_multiplier", 1.0))
         except Exception:
             return 1.0
+
 
     def analyse(self, symbol, interval="5m"):
         df = self.fetch_klines(symbol, interval, KLINES_LIMIT)
@@ -163,6 +186,7 @@ class BotEngine:
         self.last_vote[symbol] = result
         return result
 
+
     def set_leverage(self, symbol):
         sym = to_gate_symbol(symbol)
         try:
@@ -173,6 +197,7 @@ class BotEngine:
         except Exception as e:
             logger.warning(f"set_leverage({sym}): {e}"); return False
 
+
     def open_long(self, symbol, vote_result):
         if not self.client: return None
         sym = to_gate_symbol(symbol)
@@ -181,16 +206,20 @@ class BotEngine:
             entry_price = vote_result["entry_price"] or self.get_current_price(symbol)
             if not entry_price: return None
 
+
             qm       = self.get_quanto_multiplier(symbol)
             notional = FIXED_MARGIN * FIXED_LEVERAGE
             size     = int(notional / (entry_price * qm))
             if size <= 0: size = 1
 
+
             sl = round(vote_result["sl_price"], 2)
             tp = round(vote_result["tp_price"], 2)
             trail_step = vote_result.get("trail_step", 0)
 
+
             self.set_leverage(symbol)
+
 
             # أمر الدخول
             order = self.client.post(f"/futures/{SETTLE}/orders", {
@@ -198,6 +227,7 @@ class BotEngine:
             })
             exec_price = float(order.get("fill_price", entry_price) or entry_price)
             exec_size  = int(order.get("size", size))
+
 
             # SL (≤ sl_price)
             try:
@@ -210,6 +240,7 @@ class BotEngine:
             except Exception as e:
                 logger.warning(f"SL order: {e}")
 
+
             # TP (≥ tp_price)
             try:
                 self.client.post(f"/futures/{SETTLE}/price_orders", {
@@ -220,6 +251,7 @@ class BotEngine:
                 })
             except Exception as e:
                 logger.warning(f"TP order: {e}")
+
 
             trade_info = {
                 "id": len(self.trade_log) + 1, "symbol": sym, "side": "LONG",
@@ -237,6 +269,7 @@ class BotEngine:
             self.trail_prices[sym] = exec_price   # نبدأ تتبع الـ Trailing
             self.trade_log.append(trade_info)
 
+
             logger.info(
                 f"✅ OPEN LONG {sym} @ {exec_price:.4f} | "
                 f"TP={tp} | SL={sl} | Trail={trail_step} | "
@@ -246,6 +279,7 @@ class BotEngine:
         except Exception as e:
             logger.error(f"open_long({sym}): {e}"); return None
 
+
     def update_trailing_stop(self, symbol):
         """
         يحدّث الـ Trailing Stop:
@@ -254,20 +288,25 @@ class BotEngine:
         sym = to_gate_symbol(symbol)
         if sym not in self.open_trades: return
 
+
         t          = self.open_trades[sym]
         trail_step = t.get("trail_step", 0)
         if trail_step <= 0: return
 
+
         current_price = self.get_current_price(symbol)
         if not current_price: return
 
+
         prev_high = self.trail_prices.get(sym, t["entry_price"])
+
 
         if current_price > prev_high + trail_step:
             move         = current_price - prev_high
             new_sl       = round(t["current_sl"] + move, 2)
             self.trail_prices[sym] = current_price
             t["current_sl"] = new_sl
+
 
             # إلغاء SL القديم وإرسال الجديد
             try:
@@ -287,6 +326,7 @@ class BotEngine:
                 logger.info(f"🔄 Trailing SL updated: {sym} → {new_sl}")
             except Exception as e:
                 logger.warning(f"Trail SL update {sym}: {e}")
+
 
     def close_position(self, symbol, reason="MANUAL"):
         sym = to_gate_symbol(symbol)
@@ -322,6 +362,7 @@ class BotEngine:
         except Exception as e:
             logger.error(f"close_position({sym}): {e}"); return None
 
+
     def get_open_positions(self):
         if not self.client: return []
         try:
@@ -329,6 +370,7 @@ class BotEngine:
             return [p for p in positions if float(p.get("size", 0)) != 0]
         except Exception as e:
             logger.warning(f"get_positions: {e}"); return []
+
 
     def monitor_positions(self):
         updates = []
@@ -346,6 +388,7 @@ class BotEngine:
         except Exception as e:
             logger.warning(f"monitor_positions: {e}")
         return updates
+
 
     def scan_and_trade(self, symbols, interval="5m"):
         actions = []
@@ -368,97 +411,8 @@ class BotEngine:
             time.sleep(0.4)
         return actions
 
+
     def get_available_contracts(self):
         contracts = list_futures_contracts()
         return [c["name"] for c in contracts
                 if not c.get("in_delisting") and float(c.get("order_size_min", 1)) >= 0]
-import streamlit as st
-
-# --- واجهة المستخدم (Streamlit Interface) ---
-st.set_page_config(page_title="Gate.io Bot", layout="wide")
-st.title("🤖 محرك التداول الآلي - Gate.io")
-
-# مدخلات الـ API في القائمة الجانبية
-with st.sidebar:
-    st.header("إعدادات الاتصال")
-    api_key = st.text_input("API Key", type="password")
-    api_secret = st.text_input("API Secret", type="password")
-    is_testnet = st.checkbox("استخدام حساب التجربة (Testnet)", value=True)
-    
-    if st.button("اتصال بالمنصة"):
-        bot = BotEngine(api_key, api_secret, testnet=is_testnet)
-        res = bot.connect()
-        if res["ok"]:
-            st.success(f"تم الاتصال! الرصيد المتاح: {res['balance']['available']}$")
-            st.session_state['bot'] = bot
-        else:
-            st.error(f"فشل الاتصال: {res['error']}")
-
-# عرض البيانات إذا تم الاتصال
-if 'bot' in st.session_state:
-    bot = st.session_state['bot']
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("تحليل العملات")
-        symbol = st.text_input("أدخل رمز العملة (مثلاً BTC_USDT)", "BTC_USDT")
-        if st.button("تحليل الآن"):
-            result = bot.analyse(symbol)
-            if result:
-                st.write(f"النتيجة: {result['votes']} / 10")
-                st.json(result)
-
-    with col2:
-        st.subheader("المراكز المفتوحة")
-        positions = bot.get_open_positions()
-        if positions:
-            st.table(positions)
-        else:
-            st.info("لا توجد صفقات مفتوحة حالياً")
-import streamlit as st
-
-# --- واجهة المستخدم (توضع في نهاية الملف) ---
-st.set_page_config(page_title="Gate.io Trading Bot", layout="wide")
-
-st.title("🤖 واجهة تحكم بوت Gate.io")
-
-# 1. إعدادات المفاتيح في القائمة الجانبية
-with st.sidebar:
-    st.header("🔑 إعدادات الـ API")
-    key_input = st.text_input("ادخل الـ API KEY الجديد هنا", type="password")
-    secret_input = st.text_input("ادخل الـ SECRET الجديد هنا", type="password")
-    use_testnet = st.checkbox("أنا أستخدم حساب تجريبي (Testnet)", value=True)
-    
-    conn_button = st.button("تحديث والاتصال")
-
-# 2. تشغيل المحرك
-if conn_button:
-    if key_input and secret_input:
-        # إنشاء نسخة من المحرك بالمفاتيح الجديدة
-        bot = BotEngine(api_key=key_input, api_secret=secret_input, testnet=use_testnet)
-        status = bot.connect()
-        
-        if status["ok"]:
-            st.success("✅ تم الاتصال بنجاح!")
-            st.session_state['active_bot'] = bot
-            st.metric("الرصيد المتاح", f"${status['balance']['available']}")
-        else:
-            st.error(f"❌ خطأ في المفاتيح: {status['error']}")
-            st.info("تأكد أنك لا تستخدم مفاتيح الحقيقي في Testnet أو العكس.")
-
-# 3. عرض الصفقات والتحليل إذا نجح الاتصال
-if 'active_bot' in st.session_state:
-    bot = st.session_state['active_bot']
-    st.divider()
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        symbol = st.text_input("رمز العملة", "BTC_USDT")
-        if st.button("تحليل الصفقة"):
-            res = bot.analyse(symbol)
-            st.write(res)
-            
-    with col2:
-        st.subheader("المراكز المفتوحة")
-        pos = bot.get_open_positions()
-        st.write(pos if pos else "لا توجد صفقات حالياً")
