@@ -3,9 +3,12 @@
 القاعدة: 8/10 = LONG | أقل من 8 = MONITORING
 """
 
+
 import numpy as np
 import pandas as pd
 import pandas_ta as ta
+
+
 
 
 def compute_all(df: pd.DataFrame) -> pd.DataFrame:
@@ -41,12 +44,16 @@ def compute_all(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+
+
 def _f(val):
     try:
         v = float(val)
         return None if (np.isnan(v) or np.isinf(v)) else v
     except Exception:
         return None
+
+
 
 
 # ─── فلتر الجلسة ── تداول XAU فقط London + NY ──────────────────────────────
@@ -61,20 +68,26 @@ def is_trading_session(ts=None) -> bool:
     return 7 <= hour < 16
 
 
+
+
 def vote(df: pd.DataFrame, check_session: bool = True) -> dict:
     if len(df) < 3:
         return _empty_result()
 
+
     r  = df.iloc[-1]
     r2 = df.iloc[-2]
+
 
     # ── فلتر الجلسة ──────────────────────────────────────────────────────────
     ts = r.get("timestamp", None) if isinstance(r, dict) else getattr(r, "timestamp", None)
     if check_session and not is_trading_session(ts):
         return {**_empty_result(), "action": "⏰ خارج جلسة التداول (07-16 UTC)", "session_ok": False}
 
+
     details = {}
     votes   = 0
+
 
     # 1. RSI — اختراق 50 ─────────────────────────────────────────────────────
     rsi  = _f(r["rsi"]); rsi2 = _f(r2["rsi"])
@@ -87,6 +100,7 @@ def vote(df: pd.DataFrame, check_session: bool = True) -> dict:
             details["RSI"] = {"status": "⏳ تحت 50", "vote": False, "value": f"{rsi:.1f}"}
     else:
         details["RSI"] = {"status": "❓ لا بيانات", "vote": False, "value": "—"}
+
 
     # 2. MACD — تقاطع تحت الصفر ──────────────────────────────────────────────
     m = _f(r["macd"]); ms = _f(r["macd_signal"])
@@ -101,6 +115,7 @@ def vote(df: pd.DataFrame, check_session: bool = True) -> dict:
             details["MACD"] = {"status": "⏳ تحت خط الإشارة", "vote": False, "value": f"{m:.5f}"}
     else:
         details["MACD"] = {"status": "❓ لا بيانات", "vote": False, "value": "—"}
+
 
     # 3. EMA 20/50 ────────────────────────────────────────────────────────────
     e20=_f(r["ema20"]); e50=_f(r["ema50"])
@@ -118,6 +133,7 @@ def vote(df: pd.DataFrame, check_session: bool = True) -> dict:
     else:
         details["EMA"] = {"status": "❓ لا بيانات", "vote": False, "value": "—"}
 
+
     # 4. Bollinger Bands ──────────────────────────────────────────────────────
     bbu=_f(r["bb_upper"]); bbm=_f(r["bb_middle"]); bbl=_f(r["bb_lower"])
     bbl2=_f(r2["bb_lower"]); close2=_f(r2["close"])
@@ -130,6 +146,7 @@ def vote(df: pd.DataFrame, check_session: bool = True) -> dict:
             details["BB"] = {"status": "⏳ بين الخطوط", "vote": False, "value": f"{bbl:.2f}"}
     else:
         details["BB"] = {"status": "❓ لا بيانات", "vote": False, "value": "—"}
+
 
     # 5. Stochastic ───────────────────────────────────────────────────────────
     sk=_f(r["stoch_k"]); sd=_f(r["stoch_d"])
@@ -144,6 +161,7 @@ def vote(df: pd.DataFrame, check_session: bool = True) -> dict:
     else:
         details["Stoch"] = {"status": "❓ لا بيانات", "vote": False, "value": "—"}
 
+
     # 6. ADX ──────────────────────────────────────────────────────────────────
     adx = _f(r["adx"])
     if adx is not None:
@@ -156,6 +174,7 @@ def vote(df: pd.DataFrame, check_session: bool = True) -> dict:
     else:
         details["ADX"] = {"status": "❓ لا بيانات", "vote": False, "value": "—"}
 
+
     # 7. CCI ──────────────────────────────────────────────────────────────────
     cci=_f(r["cci"]); cci2=_f(r2["cci"])
     if cci is not None and cci2 is not None:
@@ -167,6 +186,7 @@ def vote(df: pd.DataFrame, check_session: bool = True) -> dict:
             details["CCI"] = {"status": "⏳ تحت -100", "vote": False, "value": f"{cci:.1f}"}
     else:
         details["CCI"] = {"status": "❓ لا بيانات", "vote": False, "value": "—"}
+
 
     # 8. Ichimoku ─────────────────────────────────────────────────────────────
     spa=_f(r.get("ichi_span_a")); spb=_f(r.get("ichi_span_b"))
@@ -184,6 +204,7 @@ def vote(df: pd.DataFrame, check_session: bool = True) -> dict:
         else:
             details["Ichimoku"] = {"status": "⏳ بيانات غير كافية", "vote": False, "value": "—"}
 
+
     # 9. OBV ──────────────────────────────────────────────────────────────────
     obv=_f(r["obv"]); obv2=_f(r2["obv"])
     if obv is not None and obv2 is not None and close is not None and close2 is not None:
@@ -195,6 +216,7 @@ def vote(df: pd.DataFrame, check_session: bool = True) -> dict:
             details["OBV"] = {"status": "⏳ OBV هابط", "vote": False, "value": f"{obv:.0f}"}
     else:
         details["OBV"] = {"status": "❓ لا بيانات", "vote": False, "value": "—"}
+
 
     # 10. ATR — SL/TP ديناميكي + Trailing ───────────────────────────────────
     atr = _f(r["atr"])
@@ -217,9 +239,11 @@ def vote(df: pd.DataFrame, check_session: bool = True) -> dict:
         details["ATR"] = {"status": "❓ ATR غير متاح", "vote": False, "value": "—"}
         trail_step = 0
 
+
     # ── الحكم النهائي — رفعنا الـ threshold إلى 8 ──────────────────────────
     THRESHOLD = 8
     action = "LONG 🚀" if votes >= THRESHOLD else f"⏳ مراقبة — {votes}/10 أصوات"
+
 
     return {
         "votes":       votes,
@@ -238,6 +262,8 @@ def vote(df: pd.DataFrame, check_session: bool = True) -> dict:
     }
 
 
+
+
 def _empty_result():
     return {
         "votes": 0, "max_votes": 10, "threshold": 8,
@@ -246,4 +272,4 @@ def _empty_result():
         "sl_price": 0, "tp_price": 0,
         "sl_pct": 0, "tp_pct": 0, "atr": 0,
         "trail_step": 0, "session_ok": True,
-  }
+    }
