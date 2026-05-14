@@ -1,8 +1,8 @@
 streamlit>=1.35.0
-gate-api
+gate-api>=7.2.78
 pandas==2.2.2
 numpy>=1.26.2
-pandas-ta==0.3.14b
+pandas-ta==0.3.14b0
 ccxt
 requests==2.31.0
 plotly==5.18.0
